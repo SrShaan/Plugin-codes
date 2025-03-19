@@ -1,0 +1,52 @@
+using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Query;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace ContactAaccountnumberAutonumber1
+{
+    public class ContactAutoNumberPlugin : IPlugin
+    {
+        public void Execute(IServiceProvider serviceProvider)
+        {
+            IPluginExecutionContext context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
+            IOrganizationServiceFactory serviceFactory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
+            IOrganizationService service = serviceFactory.CreateOrganizationService(context.UserId);
+
+            if(context.InputParameters.Contains("Target") && context.InputParameters["Target"] is Entity)
+            {
+                Entity contact = (Entity)context.InputParameters["Target"];
+                string contactNumberField = "cr262_accountcontactnumber";
+
+                string fetchXml = @"<fetch version='1.0' mapping='logical' distinct='false'>
+                                       <entity name='contact'>
+    <attribute name='contactid' />
+    <attribute name='cr262_accountcontactnumber' />
+    <order attribute='cr262_accountcontactnumber' descending='true' />
+    
+  </entity>
+</fetch>";
+                EntityCollection results = service.RetrieveMultiple(new FetchExpression(fetchXml));
+                int nextNumber = 1;
+                if (results.Entities.Count > 0)
+                {
+                    Entity latestContact = results.Entities[0];
+                    string lastNumber = latestContact.Contains(contactNumberField) ? latestContact[contactNumberField].ToString() : null;
+
+                    if(!string.IsNullOrEmpty(lastNumber)&& lastNumber.StartsWith("CON-"))
+                    {
+                        int.TryParse(lastNumber.Split('-')[1], out nextNumber);
+                        nextNumber++;
+                    }
+                }
+                string newContactNumber = $"CON-{nextNumber:D4}";
+                contact[contactNumberField] = newContactNumber;
+            }
+        }
+
+        
+    }
+}
