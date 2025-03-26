@@ -1,0 +1,48 @@
+using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Query;
+using System;
+
+
+namespace AccountDeactivationPlugin
+{
+    public class PreventAccountDeactivation : IPlugin
+    {
+        public void Execute(IServiceProvider serviceProvider)
+        {
+            IPluginExecutionContext context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
+            IOrganizationServiceFactory serviceFactory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
+            IOrganizationService service = serviceFactory.CreateOrganizationService(context.UserId);
+            if (context.MessageName.ToLower() == "update" && context.InputParameters.Contains("Target") && context.InputParameters["Target"] is Entity)
+            {
+                Entity target = (Entity)context.InputParameters["Target"];
+                if (target.LogicalName != "account")
+                    return;   
+                if(target.Contains("statecode") && target["statecode"] is OptionSetValue statecode && statecode.Value==1)
+                {
+                    Guid accountId = target.Id;
+                    QueryExpression query = new QueryExpression("contact")
+                    {
+                        ColumnSet = new ColumnSet("contactid"),
+                        Criteria = new FilterExpression
+                        {
+                            Conditions =
+                            {
+                                new ConditionExpression("parentcustomerid", ConditionOperator.Equal, accountId),
+                                new ConditionExpression("statecode", ConditionOperator.Equal, 0)
+                            }
+                        }
+                    };
+                    EntityCollection contacts = service.RetrieveMultiple(query);
+                    if (contacts.Entities.Count > 0)
+                    {
+                        throw new InvalidPluginExecutionException("Cannot deactivate this account because there are active contacts associated with it");
+                    }
+                }
+            }
+         }
+                
+    }
+}
+            
+        
+
